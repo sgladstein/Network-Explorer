@@ -125,11 +125,13 @@ This is a daisy chain: Scott Office and Living Room reach the internet through H
 | eero app test (measured at Hope Office) | 390 | 390 |
 | Windows PC wired into Scott Office, Ookla CLI, 4 runs | 104–116 | 115–124 |
 
-The PC gets **about 29% of the internet speed** after two wireless hops, which matches roughly halving per hop (390 → ~195 → ~100). The PC's own cable negotiates 1 Gbps at both ends, and VPNs were ruled out (Tailscale had no exit node; Ookla saw AT&T as the ISP). Latency rose from ~9 ms idle to 90–135 ms during uploads, so a queue builds on the path.
+The PC gets **about 29% of the internet speed** after two wireless hops, which fits roughly halving per hop (390 → ~195 → ~100). That points at the wireless path but doesn't prove it: the PC hasn't yet been tested on a different path, and eero doesn't report the backhaul's link rate. The PC's own cable negotiates 1 Gbps at both ends, and VPNs were ruled out (Tailscale had no exit node; Ookla saw AT&T as the ISP). Latency rose from ~9 ms idle to 90–135 ms during uploads, so a queue builds on the path.
 
 **What eero's API exposes:** backhaul type and upstream unit for every eero (yes); backhaul link rate (no, only `mesh_quality_bars`, which shows 5/5 on every unit and so isn't informative); Ethernet port negotiated speeds (yes); per-client band, channel, signal and link rates (yes); channel utilisation (no: needs eero Plus, HTTP 403).
 
-**Fixes to try, in order:**
+**Next test (to prove it):** plug the PC, or any computer with Ethernet, into Hope Office (port 1, unplugging the Peloton temporarily; its link is 1 Gbps-capable but currently negotiates 100 Mbps, so confirm the test link comes up at 1 Gbps). About 390 there means the wireless path is the problem; about 110 means the PC is. A second test wired into Hallway shows what one hop costs versus two.
+
+**Fixes to try once confirmed, in order:**
 1. **Wired backhaul to Hallway or Scott Office.** A cable from the eero side (a small gigabit switch behind Hope Office, since both its ports are in use) to Scott Office's spare port takes both wireless hops out for the PC. Wiring Hallway instead helps all three downstream units.
 2. **Break the daisy chain.** Move Scott Office (or Hope Office) so Scott Office connects straight to Hope Office: one wireless hop instead of two, expected roughly 2× on the PC.
 3. Re-run the snapshot and the PC speed test after each change to confirm.
