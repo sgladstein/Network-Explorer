@@ -96,10 +96,43 @@ How the results read:
 
 ## Phases
 
-### Phase 0: eero snapshot (now)
+### Phase 0: eero snapshot (done 2026-11-05)
 - Run [`tools/eero-dump`](../tools/eero-dump/) once on the Windows computer. It is read-only and signs out at the end.
 - In the same sitting, run a speed test on that computer, and run eero's speed test in the eero app.
 - **Exit:** we know which fields your eeros expose, in particular backhaul and upstream link, and have a first penalty number.
+
+#### Results
+
+**Topology** (from eero's `connection_type`, `wired` and `wireless_upstream_node` fields):
+
+```
+ AT&T gateway ──wired 1 Gbps──► Hope Office (only wired eero)
+                                   │ wireless 5 GHz
+                                   ▼
+                                 Hallway (also serves 10 devices)
+                                   │ wireless 5 GHz        │ wireless 5 GHz
+                                   ▼                       ▼
+                           Scott Office              Living Room (eero 6 Extender)
+                    (Windows PC wired, 1 Gbps)
+```
+
+This is a daisy chain: Scott Office and Living Room reach the internet through Hallway, so their traffic crosses **two** wireless hops, and Hallway's single 5 GHz radio carries both satellites plus its own clients. Hope Office's two ports are both in use (gateway uplink at 1 Gbps, a Peloton at 100 Mbps). The eeros run in bridged mode; the AT&T gateway routes.
+
+**Speed tests, same evening:**
+
+| Source | Down (Mbps) | Up (Mbps) |
+|---|---|---|
+| eero app test (measured at Hope Office) | 390 | 390 |
+| Windows PC wired into Scott Office, Ookla CLI, 4 runs | 104–116 | 115–124 |
+
+The PC gets **about 29% of the internet speed** after two wireless hops, which matches roughly halving per hop (390 → ~195 → ~100). The PC's own cable negotiates 1 Gbps at both ends, and VPNs were ruled out (Tailscale had no exit node; Ookla saw AT&T as the ISP). Latency rose from ~9 ms idle to 90–135 ms during uploads, so a queue builds on the path.
+
+**What eero's API exposes:** backhaul type and upstream unit for every eero (yes); backhaul link rate (no, only `mesh_quality_bars`, which shows 5/5 on every unit and so isn't informative); Ethernet port negotiated speeds (yes); per-client band, channel, signal and link rates (yes); channel utilisation (no: needs eero Plus, HTTP 403).
+
+**Fixes to try, in order:**
+1. **Wired backhaul to Hallway or Scott Office.** A cable from the eero side (a small gigabit switch behind Hope Office, since both its ports are in use) to Scott Office's spare port takes both wireless hops out for the PC. Wiring Hallway instead helps all three downstream units.
+2. **Break the daisy chain.** Move Scott Office (or Hope Office) so Scott Office connects straight to Hope Office: one wireless hop instead of two, expected roughly 2× on the PC.
+3. Re-run the snapshot and the PC speed test after each change to confirm.
 
 ### Phase 1: Automatic collection
 - Core service on the Windows computer:
