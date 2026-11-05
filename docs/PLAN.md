@@ -17,7 +17,7 @@ Security work from the research report is out of scope until this goal is met.
 | Satellite B | eero (2nd gen) | Wireless |
 | Extender | eero 6 Extender (dual-band Wi-Fi 6, no Ethernet ports) | Wireless |
 
-Observed: internet near the main eero is **about twice as fast** as everywhere else, even with full signal.
+Observed: on Wi-Fi in the room with the main eero, internet is **about twice as fast** as in the rest of the house, even though signal is full strength everywhere.
 
 **Leading suspect: wireless backhaul on dual-band units.** None of the four units has a radio reserved for eero-to-eero traffic. eero says its units share all bands between devices and backhaul. So on each satellite, one 5 GHz radio has to receive data from the main eero and resend it to your device, which roughly halves the speed. A device on a satellite that connects through another satellite, rather than straight to the main eero, pays that cost twice. Forum reports put the penalty for wireless backhaul on eero 6-class hardware at up to half ([eero community: wireless backhaul speeds](https://community.eero.com/t/x2ht09b/wireless-backhaul-speeds), [Best Buy Q&A](https://www.bestbuy.com/site/questions/eero-6-dual-band-mesh-wi-fi-6-extender-1-pack-add-on-only-white/6433423/question/cd28f526-91c5-343f-a949-c835dabfadc2)). "Twice as fast near the main eero" matches that pattern. These are user reports rather than lab measurements, so Phase 0 has to confirm it on your network.
 
