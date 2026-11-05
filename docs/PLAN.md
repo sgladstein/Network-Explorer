@@ -12,7 +12,7 @@ Security work from the research report is out of scope until this goal is met.
 
 | Unit | Model | Connection |
 |---|---|---|
-| Main eero | J010011: eero's model list identifies this as the **eero (2nd generation)**, a 2019 dual-band Wi-Fi 5 unit with 2 Ethernet ports ([eero model numbers](https://eero.com/support/articles/what-are-the-model-numbers-for-each-eero)) | Wired to the AT&T gateway |
+| Main eero | J010011: very likely the **eero (2nd generation)**; eero's model list shows J010001 for that model and doesn't list J010011, so this is inferred from the close variant. It is, a 2019 dual-band Wi-Fi 5 unit with 2 Ethernet ports ([eero model numbers](https://eero.com/support/articles/what-are-the-model-numbers-for-each-eero)) | Wired to the AT&T gateway |
 | Satellite A | eero (2nd gen) | Wireless; a computer is wired into it |
 | Satellite B | eero (2nd gen) | Wireless |
 | Extender | eero 6 Extender (dual-band Wi-Fi 6, no Ethernet ports) | Wireless |
