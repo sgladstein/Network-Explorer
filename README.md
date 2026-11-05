@@ -2,6 +2,8 @@
 
 Tools for understanding and improving a home eero mesh network: why some rooms have poor Wi-Fi, and how to make the network more secure.
 
+**Status:** early prototype. The project plan, with the goal, architecture and phases, is in [`docs/PLAN.md`](docs/PLAN.md) and is under review.
+
 The background research is in [`reports/Eero mesh network tooling options.md`](reports/Eero%20mesh%20network%20tooling%20options.md), with the supporting notes in [`research_notes/`](research_notes/).
 
 ## What's here
