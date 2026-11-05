@@ -45,121 +45,99 @@ Signal bars only describe one hop: the device's radio link to the nearest eero. 
 
 The project's job is to say **which hop** loses the speed in each slow room, with numbers.
 
-## Method: measure the hops separately, then change one thing and re-test
+## Approach: let eero and the wired computer do the measuring
 
-At each **spot** in the house, one measurement runs:
+Walking around with a phone running tests is tedious, and you can't control which eero the phone connects to. So the primary data sources are automatic:
 
-| Test | Measures | Hops covered |
+| Source | What it gives | How often |
 |---|---|---|
-| Wi-Fi link readout (signal, band, channel, link rate, which eero) | The radio link | 1 |
-| **LAN speed test** to a server wired to the gateway eero | Everything inside the house | 1 + 2 |
-| **Internet speed test** to a public test server | The full path | 1 + 2 + 3 |
-| Latency at idle and **during** the speed tests | Congestion and bufferbloat | all |
-| eero's own view at that moment, from the eero cloud API: which eero the phone is on, how that eero connects upstream (wired or wireless, through which eero), its link rate and client count, channel utilisation | Topology and node load | 1 + 2 |
+| **eero cloud API** (collector) | Which eero every device is on; each device's band, channel, signal and link rates; each eero's status, client count and Ethernet port speeds; channel utilisation per eero per band; live per-device throughput; eero's own speed test from the main eero (the AT&T baseline) | Every 1–2 minutes; speed test hourly |
+| **Wired Windows computer on Satellite A** | An internet speed test, plus latency under load, through Satellite A's backhaul with no Wi-Fi device link involved | Hourly, automatically |
+| *Optional:* Android app | Spot checks in a specific room | When wanted |
 
-Two reference measurements anchor the comparisons:
-
-- **WAN baseline:** a speed test from the gateway, either eero's built-in speed test (triggered via the API) or the wired server. This is the ceiling.
-- **Wired test at each eero:** a laptop plugged into the Ethernet port of each satellite eero, testing to the server. This isolates the backhaul (hop 2) with no Wi-Fi client link involved. It's cheap and often decisive.
+**Not confirmed yet:** whether eero's data includes the eero-to-eero link quality and which unit each satellite connects through. The app shows these, so the data probably has them. The snapshot tool (Phase 0) checks.
 
 How the results read:
 
 | Pattern | Weak link |
 |---|---|
-| LAN fast, internet slow, everywhere | ISP/WAN (hop 3) |
-| LAN slow in room X, but fast standing right next to that room's eero | Coverage or placement in room X (hop 1) |
-| LAN slow even right next to an eero, or the wired test at that eero is slow | That eero's backhaul (hop 2) |
-| Fast at quiet times, slow in the evening; latency spikes under load | Congestion or bufferbloat |
-| Only one device is slow | That device |
+| Wired computer on Satellite A gets about half of eero's own speed test at the same time | Satellite A's backhaul (wireless backhaul penalty) |
+| Devices on a satellite have high link rates, but their live throughput stays capped and that satellite's 5 GHz utilisation is high | That satellite's backhaul |
+| A satellite connects through another satellite | Daisy chain: an extra hop and extra loss |
+| eero's own speed test is low | ISP/WAN |
+| Slow only at certain times | Congestion |
 
-Then the **fix-and-verify loop**: record a change ("moved Office eero 3 m toward the hallway", "ran Ethernet to Office eero"), re-run the same spots, and compare before and after spot by spot.
+**Fix-and-verify:** log the change ("ran Ethernet to Office eero", "moved Satellite B 3 m toward the hallway"). The hourly tests and eero history then show before and after without anyone running tests by hand.
 
 ## How the pieces fit together
 
 ```
-                         ┌──────────────── Core server (always-on computer, wired to gateway eero) ───────────────┐
- Android app ──LAN──────►│  • LAN speed-test endpoints           • eero collector (cloud API via eero-api)       │
- (at each spot)          │  • Measurement + spot/session store   • Analysis: per-hop diagnosis, before/after     │
-   │                     │    (SQLite)                           • Web UI: floor plan, room report, comparisons   │
-   └──internet test──►   └───────────────────────────────▲──────────────────────────────────────────────────────┘
-      public test server                                  │ eero cloud API (polls, plus a snapshot at each measurement)
-                                                          eero
- Laptop wired to a satellite eero ──► browser test page served by the core (wired backhaul test)
+ eero cloud API ◄──── eero collector ────┐
+                                          ├──► Core service on the wired Windows computer
+ hourly speed tests (same computer) ─────┘     (Python, SQLite, web report at http://localhost:…)
+ Optional: Android app ──────────────────────► LAN test endpoints on the core
 ```
 
-- **Core server**: one Python service (FastAPI + SQLite), as recommended in the research report. It hosts the LAN test endpoints, stores everything, joins phone measurements with eero snapshots by time and MAC/BSSID, and produces reports.
-- **eero collector**: a module inside the core using the maintained `eero-api` Python library. It polls topology every few minutes and takes a snapshot whenever a measurement arrives. It needs a dedicated eero admin account; accounts that sign in with Amazon don't work with the unofficial API.
-- **Android app**: the measuring instrument. Picks a spot, runs the tests above, uploads.
-- **Browser test page**: lets any laptop run the LAN test, mainly for the wired test at each eero.
-- **Later, optional**: a fixed probe (for example a Raspberry Pi) left in the worst room to catch time-of-day patterns.
+- **Core service**: one Python program (SQLite storage, web report). It runs on the Windows computer wired to Satellite A, started at boot as a scheduled task. The prototype survey server's code (FastAPI and SQLite) is the starting point.
+- **eero collector**: inside the core, built on the maintained `eero-api` library. It signs in once with your email and code, then keeps the session on that computer only. It uses only reading endpoints, apart from eero's own speed test, which it triggers hourly.
+- **Speed tester**: inside the core. Runs an internet speed test hourly and logs it next to eero's gateway result.
+- **Report**: topology (which unit connects through which), the satellite penalty over time, per-unit load and client link rates, and before/after for each logged change.
 
 ### Data model
 
 | Entity | Meaning |
 |---|---|
-| Floor | A floor plan image |
-| **Spot** | A named, fixed position on a floor ("Office desk"). Spots are reused across sessions so before/after lines up. |
-| **Session** | One survey round, with a label and the change made since the last one |
-| Measurement | One run of the tests at a spot in a session, by a device |
-| eero node / eero snapshot | Units, their upstream links and stats at a point in time |
-| Client device | A phone or laptop that measured (MAC, model, capabilities) |
+| eero unit | Model, location, gateway or satellite, ports |
+| Client device | MAC, name, manufacturer |
+| Snapshot | At time *t*: each device's eero, band, signal and rates; each unit's status, clients and upstream link (if exposed); channel utilisation |
+| Speed test | Time, source (eero gateway, wired computer, phone), down/up/latency |
+| Change | Time and description of a change you made |
+| *(Phone app only)* Floor, spot, measurement | Kept from the prototype for optional spot checks |
 
 ## Phases
 
-### Phase 0: Confirm the suspect (no code; one or two evenings)
-Use the same phone and the same speed-test app throughout (for example speedtest.net). Run 3 tests at each place and note the middle result.
+### Phase 0: eero snapshot (now)
+- Run [`tools/eero-dump`](../tools/eero-dump/) once on the Windows computer. It is read-only and signs out at the end.
+- In the same sitting, run a speed test on that computer, and run eero's speed test in the eero app.
+- **Exit:** we know which fields your eeros expose, in particular backhaul and upstream link, and have a first penalty number.
 
-1. **eero app:** for each eero, note its connection type (wired or wireless) and which eero it connects through. Note whether the app shows any end-of-support or update notice for the 2nd-gen units.
-2. **Baseline:** phone about 2 m from the main eero. Also note your AT&T plan speed.
-3. **Next to each satellite:** phone about 2 m from Satellite A, Satellite B and the extender. Slow even right beside a unit means that unit's backhaul is the bottleneck, not coverage.
-4. **Wired computer on Satellite A:** run the speed test there. This measures that unit's backhaul with no Wi-Fi device link involved. About half the baseline confirms the wireless-backhaul penalty.
-5. **Slow rooms:** phone in each slow room. Note which eero the phone is on (the eero app shows it).
-6. **One experiment:** move Satellite A temporarily to a spot with a clear view of the main eero and repeat step 4.
-   - If the speed rises a lot, placement is the issue.
-   - If it stays at about half, the cause is the radio sharing itself, and the fix is wired backhaul or new hardware.
-7. **Wiring options:** note any Ethernet runs or coax outlets near the main eero and each satellite.
-
-Optional: dump real eero API data (`eero-api` CLI, signing in with your email) to see which fields Phase 1 could use.
-
-**Exit:** a filled-in table of speeds by place. Either the suspect is confirmed and we pick a fix, or it's ruled out and Phase 1 hunts further. If Phase 0 settles it, Phase 1 can be scaled down to before/after verification.
-
-### Phase 1: Segmented measurement (MVP)
-- Reshape the prototype around spots and sessions.
-- Add the internet speed test and loaded latency to the app.
-- Add the eero collector and per-measurement snapshots, mapping access points to eero units automatically if Phase 0 shows the data exists.
-- Add a per-room report naming the weakest hop, with the evidence.
-- **Exit:** one full survey producing a report that names the weak link for each slow room.
+### Phase 1: Automatic collection
+- Core service on the Windows computer:
+  - eero collector polling every 1–2 minutes, keeping history;
+  - hourly speed tests from the computer, plus eero's speed test;
+  - a basic web report.
+- Runs on its own after an install step and a one-time sign-in.
+- **Exit:** a few days of history and a report that states each satellite's link type, its upstream unit and the measured penalty.
 
 ### Phase 2: Fix-and-verify loop
-- Change log, before/after comparison per spot and room, suggested fixes from the diagnosis (move unit X toward Y, wire the backhaul, check a cable).
-- Add the browser test page for wired tests at each eero.
+- Change log and before/after comparisons, plus suggested fixes such as wiring the backhaul, moving a unit, or removing a daisy chain.
 - **Exit:** at least one change made and verified with before/after numbers.
 
 ### Phase 3: Optional extras
-- Fixed probe in the worst room, eero polling over days, time-of-day analysis.
-- Afterwards, resume the security track from the research report.
+- The Android app for room spot checks (the existing prototype, adapted).
+- More probes, and time-of-day analysis.
+- Then the security track from the research report.
 
 ## What happens to the prototype
 
-The prototype on this branch (Android survey app plus survey server) covers part of Phase 1:
-
-- **Keep:** Android Wi-Fi readout, LAN ping/download/upload tests, floor-plan tap-to-place view, server storage and web viewer, CI that builds the APK.
-- **Change:** ad-hoc points become fixed **spots** inside **sessions**; diagnosis rules get rewritten around the hop model above; access-point names come from eero data rather than manual labels.
-- **Add:** internet test, loaded latency, eero collector, before/after comparisons, browser test page.
+- **Survey server:** its FastAPI/SQLite code becomes the base of the core service. The floor-plan survey parts become optional.
+- **Android app:** stays on the branch for Phase 3 spot checks. CI keeps building it.
+- **Manual checklist:** the walk-around test list from the earlier draft is no longer needed. The wired computer plus eero data cover the same questions automatically.
 
 ## Decisions needed
 
 | # | Decision | Recommendation |
 |---|---|---|
 | 1 | Our own core service, or extend an existing eero dashboard (Dashboard_EERO / eeroVista) | Our own core. Their focus is dashboards, ours is per-hop diagnosis and survey data, but reuse the `eero-api` library they're built on. |
-| 2 | Public server for the internet speed test | Cloudflare's speed-test endpoints (unofficial but widely used by open-source tools), with M-Lab NDT7 as an alternative. Ookla has no free API. |
-| 3 | Where the core server runs | Whatever always-on machine can be wired to the gateway eero. A laptop is fine for survey sessions. |
+| 2 | Speed test used by the Windows computer | Ookla's Speedtest CLI (free for personal use, and the same service as speedtest.net), with Cloudflare's speed-test endpoints as the fallback. |
+| 3 | Where the core service runs | The Windows computer wired to Satellite A. |
 
 ## Answers so far
 
 - **Setup:** see the table above.
 - **"Full strength":** yes on all three: phone bars, the device signal in the eero app, and the eero units' status.
-- **Computers:** one computer is wired to Satellite A. Nothing is wired to the main eero yet. For the LAN test, the core server would ideally sit on the main eero's spare port, but the computer on Satellite A can host it during Phase 1 with that caveat.
+- **Computers:** a Windows computer is wired to Satellite A. Nothing is wired to the main eero.
+- **Approach:** collect data from eero and the wired computer automatically rather than by walking around (agreed).
 - **eero login:** email, so the unofficial eero API works.
 
 ## Open questions
@@ -167,3 +145,4 @@ The prototype on this branch (Android survey app plus survey server) covers part
 1. **AT&T gateway mode:** is the AT&T gateway in IP Passthrough, with the eero acting as the router, or is the eero itself in bridge mode? AT&T gateways usually offer passthrough rather than a true bridge. The answer decides which eero features and API data are available.
 2. **AT&T plan speed:** and roughly what you measure near the main eero versus elsewhere.
 3. **Wiring:** any Ethernet runs, or coax outlets, near the units?
+4. **Always on:** does the Windows computer stay on all the time? Hourly tests need it awake, or allowed to wake for them.

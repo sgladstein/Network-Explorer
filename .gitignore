@@ -2,3 +2,6 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .venv/
+# eero snapshots contain personal network data
+eero-dump-*.json
+eero-summary-*.txt
