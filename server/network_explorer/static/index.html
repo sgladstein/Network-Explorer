@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Network Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <div class="bar-inner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Network Explorer</span>
+      <span class="brand-sub">Wi-Fi survey</span>
+    </div>
+    <div class="bar-controls">
+      <label class="field">
+        <span class="field-label">Floor plan</span>
+        <select id="floorplan-select"></select>
+      </label>
+      <button id="new-plan-btn" class="btn">Add floor plan</button>
+    </div>
+  </div>
+</header>
+
+<form id="upload-form" class="upload" hidden>
+  <div class="upload-inner">
+    <label class="field"><span class="field-label">Name</span><input id="upload-name" required maxlength="100" placeholder="Ground floor"></label>
+    <label class="field"><span class="field-label">Image (PNG, JPEG or WebP)</span><input id="upload-file" type="file" accept="image/png,image/jpeg,image/webp" required></label>
+    <div class="upload-actions">
+      <button type="submit" class="btn btn-primary">Upload</button>
+      <button type="button" id="upload-cancel" class="btn btn-quiet">Cancel</button>
+    </div>
+    <p id="upload-error" class="error" hidden></p>
+  </div>
+</form>
+
+<main class="layout">
+  <section class="map-col" aria-label="Heatmap">
+    <div class="map-toolbar">
+      <div class="seg" role="radiogroup" aria-label="Metric">
+        <button class="seg-btn" data-metric="rssi" aria-pressed="true">Signal</button>
+        <button class="seg-btn" data-metric="download_mbps" aria-pressed="false">Download</button>
+        <button class="seg-btn" data-metric="upload_mbps" aria-pressed="false">Upload</button>
+        <button class="seg-btn" data-metric="latency_ms_median" aria-pressed="false">Latency</button>
+      </div>
+      <label class="field field-inline">
+        <span class="field-label">Access point</span>
+        <select id="ap-filter"><option value="">All</option></select>
+      </label>
+    </div>
+    <div class="map-frame">
+      <canvas id="map" width="800" height="600" aria-label="Floor plan with measurements"></canvas>
+      <div id="map-empty" class="map-empty" hidden></div>
+    </div>
+    <div id="legend" class="legend"></div>
+  </section>
+
+  <aside class="side-col">
+    <section class="panel" id="detail-panel" hidden>
+      <div class="panel-head">
+        <h2>Selected spot</h2>
+        <button id="delete-sample" class="btn btn-quiet btn-small">Delete</button>
+      </div>
+      <div id="detail"></div>
+    </section>
+
+    <section class="panel">
+      <h2>What's wrong</h2>
+      <ul id="survey-findings" class="findings"></ul>
+    </section>
+
+    <section class="panel">
+      <h2>Rooms</h2>
+      <div class="table-wrap"><table id="rooms-table" class="data"></table></div>
+    </section>
+
+    <section class="panel">
+      <h2>Access points</h2>
+      <p class="hint">Each eero broadcasts a few BSSIDs (one per band). Name them after the eero they belong to; the eero app shows which device is on which eero.</p>
+      <div class="table-wrap"><table id="ap-table" class="data"></table></div>
+    </section>
+  </aside>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
