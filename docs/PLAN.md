@@ -8,6 +8,26 @@ Find out why the internet is much slower in some parts of the house even though 
 
 Security work from the research report is out of scope until this goal is met.
 
+## Your setup and the leading suspect
+
+| Unit | Model | Connection |
+|---|---|---|
+| Main eero | J010011: eero's model list identifies this as the **eero (2nd generation)**, a 2019 dual-band Wi-Fi 5 unit with 2 Ethernet ports ([eero model numbers](https://eero.com/support/articles/what-are-the-model-numbers-for-each-eero)) | Wired to the AT&T gateway |
+| Satellite A | eero (2nd gen) | Wireless; a computer is wired into it |
+| Satellite B | eero (2nd gen) | Wireless |
+| Extender | eero 6 Extender (dual-band Wi-Fi 6, no Ethernet ports) | Wireless |
+
+Observed: internet near the main eero is **about twice as fast** as everywhere else, even with full signal.
+
+**Leading suspect: wireless backhaul on dual-band units.** None of the four units has a radio reserved for eero-to-eero traffic. eero says its units share all bands between devices and backhaul. So on each satellite, one 5 GHz radio has to receive data from the main eero and resend it to your device, which roughly halves the speed. A device on a satellite that connects through another satellite, rather than straight to the main eero, pays that cost twice. Forum reports put the penalty for wireless backhaul on eero 6-class hardware at up to half ([eero community: wireless backhaul speeds](https://community.eero.com/t/x2ht09b/wireless-backhaul-speeds), [Best Buy Q&A](https://www.bestbuy.com/site/questions/eero-6-dual-band-mesh-wi-fi-6-extender-1-pack-add-on-only-white/6433423/question/cd28f526-91c5-343f-a949-c835dabfadc2)). "Twice as fast near the main eero" matches that pattern. These are user reports rather than lab measurements, so Phase 0 has to confirm it on your network.
+
+Other suspects still to rule out: daisy-chaining, satellites placed too far from the main eero, and the older Wi-Fi 5 units limiting the extender.
+
+If wireless backhaul is confirmed, the fixes in order of effect are:
+1. **Wired backhaul** to the satellite(s) covering the slow areas, using Ethernet, MoCA over existing coax, or powerline as a last resort. The 2nd-gen units have Ethernet ports. The extender has none, so it can't be wired. The cable must come from the **eero side** (the main eero's spare port or a switch behind it), not from the AT&T gateway's other ports. Otherwise the satellite lands on AT&T's network instead of the mesh.
+2. **Placement**: make every satellite connect directly to the main eero, not through another satellite, and halfway rather than at the edge.
+3. **Newer hardware**: units with stronger backhaul. This costs money, so we'd decide it with data from steps 1–2.
+
 ## Why "full signal" can still be slow
 
 Signal bars only describe one hop: the device's radio link to the nearest eero. Internet traffic from a far room crosses several hops, and the slowest one sets the speed:
@@ -86,11 +106,22 @@ Then the **fix-and-verify loop**: record a change ("moved Office eero 3 m toward
 
 ## Phases
 
-### Phase 0: Facts and baseline (mostly no code; about a week of evenings)
-- Inventory: eero models, where each sits, how each connects upstream (wired, wireless, through which unit), ISP plan speed.
-- Dump real eero API data (`eero-api` CLI) to confirm which fields your units expose: upstream link, wired/wireless backhaul, port link speeds, per-client link rate, BSSIDs per unit.
-- Quick manual tests: a speed test standing next to each eero, and in each slow room. Wired laptop test at each eero if possible.
-- **Exit:** a known topology, a list of usable API fields, and rough numbers per room. This alone may reveal the weak link (for example a daisy-chained wireless unit, or a 100 Mbps Ethernet link).
+### Phase 0: Confirm the suspect (no code; one or two evenings)
+Use the same phone and the same speed-test app throughout (for example speedtest.net). Run 3 tests at each place and note the middle result.
+
+1. **eero app:** for each eero, note its connection type (wired or wireless) and which eero it connects through. Note whether the app shows any end-of-support or update notice for the 2nd-gen units.
+2. **Baseline:** phone about 2 m from the main eero. Also note your AT&T plan speed.
+3. **Next to each satellite:** phone about 2 m from Satellite A, Satellite B and the extender. Slow even right beside a unit means that unit's backhaul is the bottleneck, not coverage.
+4. **Wired computer on Satellite A:** run the speed test there. This measures that unit's backhaul with no Wi-Fi device link involved. About half the baseline confirms the wireless-backhaul penalty.
+5. **Slow rooms:** phone in each slow room. Note which eero the phone is on (the eero app shows it).
+6. **One experiment:** move Satellite A temporarily to a spot with a clear view of the main eero and repeat step 4.
+   - If the speed rises a lot, placement is the issue.
+   - If it stays at about half, the cause is the radio sharing itself, and the fix is wired backhaul or new hardware.
+7. **Wiring options:** note any Ethernet runs or coax outlets near the main eero and each satellite.
+
+Optional: dump real eero API data (`eero-api` CLI, signing in with your email) to see which fields Phase 1 could use.
+
+**Exit:** a filled-in table of speeds by place. Either the suspect is confirmed and we pick a fix, or it's ruled out and Phase 1 hunts further. If Phase 0 settles it, Phase 1 can be scaled down to before/after verification.
 
 ### Phase 1: Segmented measurement (MVP)
 - Reshape the prototype around spots and sessions.
@@ -124,10 +155,15 @@ The prototype on this branch (Android survey app plus survey server) covers part
 | 2 | Public server for the internet speed test | Cloudflare's speed-test endpoints (unofficial but widely used by open-source tools), with M-Lab NDT7 as an alternative. Ookla has no free API. |
 | 3 | Where the core server runs | Whatever always-on machine can be wired to the gateway eero. A laptop is fine for survey sessions. |
 
-## Questions for you
+## Answers so far
 
-1. **eero setup:** how many units and which models; where each one is; which are wired and how (Ethernet, switch, MoCA, powerline); your ISP plan speed.
-2. **The slow areas:** which rooms, roughly how slow compared with near the gateway, which devices (phones, laptops, TVs), and whether it's worse at certain times.
-3. **"Full strength":** is that the bars on your phone, the device's signal in the eero app, or the eero units' own connection status in the app?
-4. **Hardware:** an always-on computer that can be wired to the gateway eero, and a laptop with Ethernet (or an adapter) for wired tests.
-5. **eero account:** do you sign in with Amazon, or with an email or phone number?
+- **Setup:** see the table above.
+- **"Full strength":** yes on all three: phone bars, the device signal in the eero app, and the eero units' status.
+- **Computers:** one computer is wired to Satellite A. Nothing is wired to the main eero yet. For the LAN test, the core server would ideally sit on the main eero's spare port, but the computer on Satellite A can host it during Phase 1 with that caveat.
+- **eero login:** email, so the unofficial eero API works.
+
+## Open questions
+
+1. **AT&T gateway mode:** is the AT&T gateway in IP Passthrough, with the eero acting as the router, or is the eero itself in bridge mode? AT&T gateways usually offer passthrough rather than a true bridge. The answer decides which eero features and API data are available.
+2. **AT&T plan speed:** and roughly what you measure near the main eero versus elsewhere.
+3. **Wiring:** any Ethernet runs, or coax outlets, near the units?
