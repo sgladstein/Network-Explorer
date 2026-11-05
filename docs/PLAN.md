@@ -12,7 +12,7 @@ Security work from the research report is out of scope until this goal is met.
 
 | Unit | Model | Connection |
 |---|---|---|
-| Main eero | J010011: eero's model list identifies this as the **eero (2nd generation)**, a 2019 dual-band Wi-Fi 5 unit with 2 Ethernet ports ([eero model numbers](https://eero.com/support/articles/what-are-the-model-numbers-for-each-eero)) | Wired to the AT&T gateway |
+| Main eero | J010011: very likely the **eero (2nd generation)**; eero's model list shows J010001 for that model and doesn't list J010011, so this is inferred from the close variant. That model is a 2019 dual-band Wi-Fi 5 unit with 2 Ethernet ports ([eero model numbers](https://eero.com/support/articles/what-are-the-model-numbers-for-each-eero)) | Wired to the AT&T gateway |
 | Satellite A | eero (2nd gen) | Wireless; a computer is wired into it |
 | Satellite B | eero (2nd gen) | Wireless |
 | Extender | eero 6 Extender (dual-band Wi-Fi 6, no Ethernet ports) | Wireless |
@@ -96,10 +96,47 @@ How the results read:
 
 ## Phases
 
-### Phase 0: eero snapshot (now)
+### Phase 0: eero snapshot (done 2026-11-05)
 - Run [`tools/eero-dump`](../tools/eero-dump/) once on the Windows computer. It is read-only and signs out at the end.
 - In the same sitting, run a speed test on that computer, and run eero's speed test in the eero app.
 - **Exit:** we know which fields your eeros expose, in particular backhaul and upstream link, and have a first penalty number.
+
+#### Results
+
+**Topology** (from eero's `connection_type`, `wired` and `wireless_upstream_node` fields):
+
+```
+ AT&T gateway ──wired 1 Gbps──► Hope Office (only wired eero)
+                                   │ wireless 5 GHz
+                                   ▼
+                                 Hallway (also serves 10 devices)
+                                   │ wireless 5 GHz        │ wireless 5 GHz
+                                   ▼                       ▼
+                           Scott Office              Living Room (eero 6 Extender)
+                    (Windows PC wired, 1 Gbps)
+```
+
+This is a daisy chain: Scott Office and Living Room reach the internet through Hallway, so their traffic crosses **two** wireless hops, and Hallway's single 5 GHz radio carries both satellites plus its own clients. Hope Office's two ports are both in use (gateway uplink at 1 Gbps, a Peloton at 100 Mbps). The eeros run in bridged mode; the AT&T gateway routes.
+
+**Speed tests, same evening:**
+
+| Source | Down (Mbps) | Up (Mbps) |
+|---|---|---|
+| eero app test (measured at Hope Office) | 390 | 390 |
+| Windows PC wired into Scott Office, Ookla CLI, 4 runs | 104–116 | 115–124 |
+
+The PC gets **about 29% of the internet speed** after two wireless hops. Both hops share one 5 GHz radio per unit and the same channel (153, 80 MHz, on all four units), so the data crosses the air twice and uses twice the airtime: that alone roughly halves throughput in total (not per hop). Rough budget: an 867 Mbps link delivers ~500 Mbps in practice (assumed ~60% efficiency), ~250 Mbps across two hops on one channel, perhaps 150–200 Mbps with the channel already 14–37% busy per unit (Scott Office busiest) before testing. The measured ~112 is below that, so the shared channel explains most of the drop but probably not all; the backhaul links may run below 867 (eero doesn't report their rate), or other traffic or the PC may contribute. The PC hasn't yet been tested on a different path. The PC's own cable negotiates 1 Gbps at both ends, and VPNs were ruled out (Tailscale had no exit node; Ookla saw AT&T as the ISP). Latency rose from ~9 ms idle to 90–135 ms during uploads, so a queue builds on the path.
+
+**What eero's API exposes:** backhaul type and upstream unit for every eero (yes); backhaul link rate (no, only `mesh_quality_bars`, which shows 5/5 on every unit and so isn't informative); Ethernet port negotiated speeds (yes); per-client band, channel, signal and link rates (yes); channel utilisation: the dedicated endpoint needs eero Plus (HTTP 403), but per-unit busy percentages appear elsewhere in the dump.
+
+**Phone tests by Scotttt (same evening, phone checked to be on the named eero):** phone on Hope Office Wi-Fi 350 Mbps (data crosses the air once); phone on Hallway 170 (twice). Each extra trip on the shared channel halves throughput, as predicted. The PC on Scott Office also crosses the air twice but gets ~112, below the ~170 that predicts, so the Hallway→Scott Office link (Scott Office was the busiest unit) or the PC loses extra.
+
+**Next test (to prove it):** a laptop wired into one of Hallway's free ports (crosses the air once; expect ~350). Comparing it with the PC isolates the Hallway→Scott Office link. Alternatively: plug the PC, or any computer with Ethernet, into Hope Office (port 1, unplugging the Peloton temporarily; its link is 1 Gbps-capable but currently negotiates 100 Mbps, so confirm the test link comes up at 1 Gbps). About 390 there means the wireless path is the problem; about 110 means the PC is. A second test wired into Hallway shows what one hop costs versus two.
+
+**Fixes to try once confirmed, in order:**
+1. **Wired backhaul to Hallway or Scott Office.** A cable from the eero side (a small gigabit switch behind Hope Office, since both its ports are in use) to Scott Office's spare port takes both wireless hops out for the PC. Wiring Hallway instead helps all three downstream units.
+2. **Break the daisy chain.** Move Scott Office (or Hope Office) so Scott Office connects straight to Hope Office: one wireless hop instead of two, expected roughly 2× on the PC.
+3. Re-run the snapshot and the PC speed test after each change to confirm.
 
 ### Phase 1: Automatic collection
 - Core service on the Windows computer:
